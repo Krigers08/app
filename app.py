@@ -1,5 +1,6 @@
 import tkinter as tk
 import os
+import sqlite3
 
 from reportlab.pdfgen import canvas
 class App:
@@ -9,7 +10,20 @@ class App:
         self.master.title("Le app")
 
         self.create_widgets()
+        self.create_database()
 
+    def create_database(self):
+        self.conn = sqlite3.connect('app_data.db')
+        self.cursor = self.conn.cursor()
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS data (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT,
+                property TEXT
+            )
+        """)
+        self.conn.commit()
+        
     def create_widgets(self):
         frame = tk.Frame(self.master)
         frame.pack(anchor="nw", pady=20)
@@ -34,9 +48,16 @@ class App:
     def save_data(self):
         title_value = self.title_entry.get()
         property_value = self.property_entry.get()
+        self.cursor.execute(
+            "INSERT INTO data (title, property) VALUES (?, ?)",
+            (title_value, property_value)
+        )
+        self.conn.commit()
+
         self.saved_label.config(
             text=f"Saved Data:\nTitle: {title_value}\nProperty: {property_value}"
         )
+
     def generate_pdf_report(self):
         c = canvas.Canvas("report.pdf")
         c.setFont("Helvetica-Bold", 14)
@@ -48,4 +69,4 @@ class App:
 if __name__ == "__main__":
     root = tk.Tk()
     app = App(root)
-    root.mainloop()~~~
+    root.mainloop()
