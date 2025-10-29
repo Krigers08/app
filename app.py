@@ -25,11 +25,12 @@ class App:
                 property TEXT
             )
         """)
-
+        
         self.conn.commit()
         self.load_data()
 
     def create_widgets(self):
+        #=============INPUT/FRAME==========
         frame = ttk.Frame(self.master)
         frame.pack(pady=10, padx=10, fill='x')
 
@@ -37,14 +38,16 @@ class App:
         self.title_entry = ttk.Entry(frame, width=30)
         self.title_entry.grid(row=0, column=1, padx=5)
 
-        ttk.Label(frame, text="Property:").grid(row=1, column=0, sticky="w")
+        ttk.Label(frame, text="Description:").grid(row=1, column=0, sticky="w")
         self.property_entry = ttk.Entry(frame, width=30)
         self.property_entry.grid(row=1, column=1, padx=5)
 
-        self.saved_label = ttk.Label(text="", anchor="w", justify="left")
-        self.saved_label.pack(anchor="w")
+        self.message_frame = ttk.Frame(self.master)
+        self.message_frame.pack(fill="x", padx=10, pady=(0, 5))
 
-        #=============PLACE FOR DATABASE THINGY======
+        self.message_label = ttk.Label(self.message_frame, text="", anchor="w")
+        self.message_label.pack(fill="x")
+        #=============DATABASE======
         self.table = ttk.Treeview(
             self.master,
             columns=("ID", "Title", "Property"),
@@ -52,17 +55,23 @@ class App:
         )
         self.table.heading("ID", text="ID")
         self.table.heading("Title", text="Title")
-        self.table.heading("Property", text="Property")
+        self.table.heading("Property", text="Description")
 
-        self.table.column("ID", width=50, anchor="center")
+        self.table.column("ID", width=35, anchor="center")
         self.table.column("Title", width=200, anchor="sw")
         self.table.column("Property", width=200, anchor="sw")
 
         self.table.pack(fill='both', expand=True, pady=10, padx=10)
-
+        #==================ACTION BUTTONS==========================
 
         tk.Button(frame,text="Save", command=self.save_data).grid(row=1, column=2, padx=5, pady=10)
         tk.Button(frame, text="Export PDF", command=self.generate_pdf_report).grid(row=3, column=0, padx=5, pady=10,)
+    
+    #================SHOW MESSAGE==========
+    def show_message(self, text):
+        self.message_label.config(text=text)
+        self.message_label.after(3000, lambda: self.message_label.config(text=""))
+    #================LOAD DATA==========
     def load_data(self):
         for row in self.table.get_children():
             self.table.delete(row)
@@ -71,17 +80,27 @@ class App:
         rows = self.cursor.fetchall()
         for row in rows:
             self.table.insert("", "end", values=row)
+    #================EDIT DATA==========
+    def edit_data(self):
+        selection = self.table.selection()
+        if not selection:
+            return
+
+    #================SAVE DATA==========
     def save_data(self):
         title_value = self.title_entry.get()
         property_value = self.property_entry.get()
-        self.cursor.execute(
-            "INSERT INTO data (title, property) VALUES (?, ?)",
-            (title_value, property_value)
-        )
+        if not title_value or not property_value:
+            self.show_message("Please fill in all fields.")
+        else:
+            self.cursor.execute(
+                "INSERT INTO data (title, property) VALUES (?, ?)",
+                (title_value, property_value)
+            )
         self.conn.commit()
-
         self.load_data()
-  
+
+    #================PDF REPORTING==========
     def generate_pdf_report(self):
         c = canvas.Canvas("report.pdf")
         c.setFont("Helvetica-Bold", 14)
