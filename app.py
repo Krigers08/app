@@ -44,11 +44,9 @@ class App:
         self.property_entry = ttk.Entry(frame, width=30)
         self.property_entry.grid(row=1, column=1, padx=5)
 
-        self.message_frame = ttk.Frame(self.master)
-        self.message_frame.pack(fill="x", padx=10, pady=(0, 5))
-
-        self.message_label = ttk.Label(self.message_frame, text="", anchor="w")
-        self.message_label.pack(fill="x")
+        self.message_label = ttk.Label(frame, text="", anchor="w")
+        self.message_label.grid(row=0, column=3, padx=(10, 0), sticky="w")
+        
         #=============DATABASE===============
         self.table = ttk.Treeview(
             self.master,
@@ -67,9 +65,10 @@ class App:
 
         #==================ACTION BUTTONS==========================
 
-        ttk.Button(frame,text="Save", command=self.save_data).grid(row=0, column=2, padx=5, pady=10)
-        ttk.Button(frame, text="Export PDF", command=self.generate_pdf_report).grid(row=3, column=0, padx=5, pady=10,)
-        ttk.Button(frame, text="Edit", command=self.edit_data).grid(row=1, column=2, padx=5, pady=10,)
+        ttk.Button(frame, text="Export PDF", command=self.generate_pdf_report).grid(row=3, column=0, padx=0)
+        ttk.Button(frame,text="Save", command=self.save_data).grid(row=0, column=2, padx=5)
+        ttk.Button(frame, text="Edit", command=self.edit_data).grid(row=1, column=2, padx=5)
+        ttk.Button(frame, text="Delete", command=self.delete_data).grid(row=1, column=3, padx=5)
     #================SHOW MESSAGE==========
     def show_message(self, text):
         self.message_label.config(text=text)
@@ -119,7 +118,7 @@ class App:
             )
             self.show_message("Data updated successfully.")
             self.editing_id = None
-            
+
         else:
             self.cursor.execute(
                 "INSERT INTO data (title, property) VALUES (?, ?)",
@@ -131,6 +130,21 @@ class App:
 
         self.title_entry.delete(0, tk.END)
         self.property_entry.delete(0, tk.END)
+
+    #================DELETE DATA==========
+    def delete_data(self):
+        selection = self.table.selection()
+        if not selection:
+            self.show_message("Please select a record to delete.")
+            return
+        item = self.table.item(selection[0])
+        record_id = item["values"][0]
+        self.cursor.execute("DELETE FROM data WHERE id=?", (record_id,))
+        self.conn.commit()
+
+        self.load_data()
+        self.show_message(f"Item {record_id} deleted successfully.")
+
     #================PDF REPORTING==========
     def generate_pdf_report(self):
         c = canvas.Canvas("report.pdf")
