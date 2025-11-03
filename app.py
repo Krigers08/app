@@ -10,7 +10,10 @@ class App:
     def __init__(self, master):
         self.master = master
         self.master.geometry("1080x720")
-        self.master.title("Task Manager")
+        self.master.title("Price tag generator")
+
+        self.pvn_rates = ["21%", "12%", "5%"]
+        self.unit_types = ["Gb", "Kg", "L", "M"]
 
         self.create_widgets()
         self.create_database()
@@ -25,37 +28,16 @@ class App:
             CREATE TABLE IF NOT EXISTS data (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT,
-                property TEXT,
                 price REAL,
+                pvn_percent TEXT,
                 pvn_price REAL,
-                quantity INTEGER,
-                origin TEXT        
+                origin TEXT,
+                barcode TEXT,
+                unit_type TEXT
             )
         """)
         self.conn.commit()
         self.load_data()
-        self.create_pvn_database()
-
-    #================PVN DATABASE==========
-    def create_pvn_database(self):
-        conn = sqlite3.connect('pvn_rates.db')
-        cursor = conn.cursor()
-        cursor.execute(""" 
-            CREATE TABLE IF NOT EXISTS pvn_rates (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                property TEXT UNIQUE,
-                rate REAL
-            )
-        """)
-        cursor.execute("""
-            INSERT OR IGNORE INTO pvn_rates (property, rate) VALUES
-            ('Regular', 0.21),
-            ('Foods', 0.12),
-            ('Special', 0.05)
-        """)
-
-        conn.commit()
-        conn.close()
 
     def create_widgets(self):
         #=============INPUT/FRAME==========
@@ -64,33 +46,29 @@ class App:
 
         ttk.Label(frame, text="Title:").grid(row=0, column=0, sticky="w")
         self.title_entry = ttk.Entry(frame, width=30)
-        self.title_entry.grid(row=0, column=1, padx=5)
+        self.title_entry.grid(row=0, column=1, padx=5, pady=5)
 
-        ttk.Label(frame, text="Product Type:").grid(row=1, column=0, sticky="w")
-        self.property_var = StringVar()
-
-        self.property_combo = ttk.Combobox(
-            frame,
-            textvariable=self.property_var,
-            values=["Regular","Foods","Special"],
-            state="readonly",
-            width=27
-        )
-
-        self.property_combo.grid(row=1, column=1, padx=5)
-        self.property_combo.set("Regular") 
-
-        ttk.Label(frame, text="Price:").grid(row=2, column=0, sticky="w")
+        ttk.Label(frame, text="Price:").grid(row=1, column=0, sticky="w")
         self.price_entry = ttk.Entry(frame, width=30)
-        self.price_entry.grid(row=2, column=1, padx=5)
+        self.price_entry.grid(row=1, column=1, padx=5, pady=5)
 
-        ttk.Label(frame, text="Quantity:").grid(row=3, column=0, sticky="w")
-        self.quantity_entry = ttk.Entry(frame, width=30)
-        self.quantity_entry.grid(row=3, column=1, padx=5)
+        ttk.Label(frame, text="PVN Rate:").grid(row=2, column=0, sticky="w")
+        self.pvn_var = tk.StringVar(value="21%")
+        self.pvn_dropdown = ttk.Combobox(frame, textvariable=self.pvn_var, values=self.pvn_rates, state="readonly", width=28)
+        self.pvn_dropdown.grid(row=2, column=1, padx=5, pady=5)
 
-        ttk.Label(frame, text="Origin:").grid(row=4, column=0, sticky="w")
+        ttk.Label(frame, text="Unit Type:").grid(row=3, column=0, sticky="w")
+        self.unit_type_var = tk.StringVar(value="Kg")
+        self.unit_type_entry = ttk.Combobox(frame, textvariable=self.unit_type_var, values=self.unit_types, state="readonly", width=28)
+        self.unit_type_entry.grid(row=3, column=1, padx=5, pady=5)
+
+        ttk.Label(frame, text="Origin:").grid(row=5, column=0, sticky="w")
         self.origin_entry = ttk.Entry(frame, width=30)
-        self.origin_entry.grid(row=4, column=1, padx=5)
+        self.origin_entry.grid(row=5, column=1, padx=5, pady=5)
+
+        ttk.Label(frame, text="Barcode:").grid(row=6, column=0, sticky="w")
+        self.barcode_entry = ttk.Entry(frame, width=30)
+        self.barcode_entry.grid(row=6, column=1, padx=5, pady=5)
 
         self.message_label = ttk.Label(frame, text="", anchor="w")
         self.message_label.grid(row=0, column=3, padx=(10, 0), sticky="w")
@@ -98,24 +76,26 @@ class App:
         #=============DATABASE===============
         self.table = ttk.Treeview(
             self.master,
-            columns=("ID", "Title", "Property", "Price", "PVN_Price", "Quantity", "Origin"),
+            columns=("ID", "Title", "Price", "PVN_Percent", "PVN_Price", "Origin", "Barcode", "Unit_Type"),
             show="headings"
         )
         self.table.heading("ID", text="ID")
         self.table.heading("Title", text="Title")
-        self.table.heading("Property", text="Category")
         self.table.heading("Price", text="Price")
+        self.table.heading("PVN_Percent", text="PVN Percent")
         self.table.heading("PVN_Price", text="PVN Price")
-        self.table.heading("Quantity", text="Quantity")
         self.table.heading("Origin", text="Origin")
+        self.table.heading("Barcode", text="Barcode")
+        self.table.heading("Unit_Type", text="Unit Type")
 
         self.table.column("ID", width=69, anchor="center")
         self.table.column("Title", width=200, anchor="center")
-        self.table.column("Property", width=140, anchor="center")
         self.table.column("Price", width=100, anchor="center")
+        self.table.column("PVN_Percent", width=100, anchor="center")
         self.table.column("PVN_Price", width=100, anchor="center")
-        self.table.column("Quantity", width=100, anchor="center")
         self.table.column("Origin", width=100, anchor="center")
+        self.table.column("Barcode", width=100, anchor="center")
+        self.table.column("Unit_Type", width=100, anchor="center")
 
         self.table.pack(fill='both', expand=True, pady=10, padx=10)
 
@@ -126,7 +106,6 @@ class App:
         ttk.Button(frame,text="Save", command=self.save_data).grid(row=0, column=2, padx=5)
         ttk.Button(frame, text="Edit", command=self.edit_data).grid(row=1, column=2, padx=5)
         ttk.Button(frame, text="Delete", command=self.delete_data).grid(row=2, column=2, padx=5)
-        self.property_combo.grid(row=1, column=1, padx=5)
 
         export_frame = ttk.Frame(self.master)
         export_frame.pack(pady=5, padx=10, anchor="center")
@@ -141,7 +120,7 @@ class App:
         for row in self.table.get_children():
             self.table.delete(row)
 
-        self.cursor.execute("select id, title, property, price, pvn_price, quantity, origin from data")
+        self.cursor.execute("select ID, Title, Price, PVN_Percent, PVN_Price, Origin, Barcode, Unit_Type from data")
         rows = self.cursor.fetchall()
         for row in rows:
             self.table.insert("", "end", values=row)
@@ -152,80 +131,68 @@ class App:
         if not selection:
             self.show_message("Please select a record to edit.")
             return
-        
+            
         item = self.table.item(selection[0])
         self.editing_id = item["values"][0]
-        title = item["values"][1]
-        description = item["values"][2]
-        price = item["values"][3]
-        quantity = item["values"][5]
-        origin = item["values"][6]
-
         self.title_entry.delete(0, tk.END)
-        self.title_entry.insert(0, title)
-        self.property_var.set(description)
+        self.title_entry.insert(0, item["values"][1])
+
         self.price_entry.delete(0, tk.END)
-        self.price_entry.insert(0, price)
-        self.quantity_entry.delete(0, tk.END)
-        self.quantity_entry.insert(0, quantity)
+        self.price_entry.insert(0, item["values"][2])
+
         self.origin_entry.delete(0, tk.END)
-        self.origin_entry.insert(0, origin)
+        self.origin_entry.insert(0, item["values"][5])
+
+        self.barcode_entry.delete(0, tk.END)
+        self.barcode_entry.insert(0, item["values"][6])
+
+        self.unit_type_entry.set(item["values"][7])
 
         self.show_message(f"Editing record ID {self.editing_id}")
     #================SAVE DATA==========
     def save_data(self):
-        title_value = self.title_entry.get().strip()
-        property_value = self.property_var.get().strip()
-         
-        price_user = self.price_entry.get().strip().replace(',', '.')
-        if not price_user:
-            self.show_message("Please enter a price.")
-            return
-        price_value = float(price_user)
 
-        quantity_value = self.quantity_entry.get().strip()
-        origin_value = self.origin_entry.get().strip()
-        if origin_value:
-            origin_value = origin_value[0].upper() + origin_value[1:].lower()
+        title_entry_value = self.title_entry.get().strip()
+        price_entry_value = self.price_entry.get().strip().replace(',', '.')
+        pvn_var_value = self.pvn_var.get()
 
-        pvn_conn = sqlite3.connect('pvn_rates.db')
-        pvn_cursor = pvn_conn.cursor()
-        pvn_cursor.execute("SELECT rate FROM pvn_rates WHERE property=?", (property_value,))
-        pvn_rate = pvn_cursor.fetchone()[0]
-        pvn_conn.close()
+        price_value = float(price_entry_value)
+        
+        pvn_percent = self.pvn_var.get()
+        pvn_rate = float(pvn_percent.strip('%')) / 100
+        pvn_price_value = round(price_value * (1 + pvn_rate), 2)
 
-        price_with_pvn = round(price_value * (1 + pvn_rate), 2)
-        #added_pvn = price_with_pvn - price_value
+        origin_entry_value = self.origin_entry.get().strip()
+        barcode_entry_value = self.barcode_entry.get().strip()
+        unit_type_entry_value = self.unit_type_entry.get().strip()
 
-        if not title_value or not property_value or not quantity_value or not origin_value: 
+        if not title_entry_value or not origin_entry_value or not barcode_entry_value or not unit_type_entry_value: 
             self.show_message("Please fill in all fields.")
             return
-        
-        if not price_value or price_value <= 0:
-            self.show_message("Price must be greater than zero.")
-            return
+
         if self.editing_id:
             self.cursor.execute(
-                "UPDATE data SET title=?, property=?, price=?, pvn_price=?, quantity=?, origin=? WHERE id=?",
-                (title_value, property_value, price_value, price_with_pvn, quantity_value, origin_value, self.editing_id)
+                "UPDATE data SET title=?, price=?, pvn_percent=?, pvn_price=?, origin=?, barcode=?, unit_type=? WHERE id=?",
+                (title_entry_value, price_value, pvn_var_value, pvn_price_value, origin_entry_value, barcode_entry_value, unit_type_entry_value, self.editing_id)
             )
             self.show_message("Data updated successfully.")
             self.editing_id = None
 
         else:
             self.cursor.execute(
-                "INSERT INTO data (title, property, price, pvn_price, quantity, origin) VALUES (?, ?, ?, ?, ?, ?)",
-                (title_value, property_value, price_value, price_with_pvn, quantity_value, origin_value)
+                "INSERT INTO data (title, price, pvn_percent, pvn_price, origin, barcode, unit_type) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (title_entry_value, price_value, pvn_var_value, pvn_price_value, origin_entry_value, barcode_entry_value, unit_type_entry_value)
             )
             self.show_message("Data saved successfully.")
         self.conn.commit()
         self.load_data()
 
         self.title_entry.delete(0, tk.END)
-        self.property_var.set("Regular")
         self.price_entry.delete(0, tk.END)
-        self.quantity_entry.delete(0, tk.END)
         self.origin_entry.delete(0, tk.END)
+        self.barcode_entry.delete(0, tk.END)
+        self.unit_type_entry.set('Kg')
+        self.pvn_var.set("21%")
 
     #================DELETE DATA==========
     def delete_data(self):
