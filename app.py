@@ -2,10 +2,114 @@ import tkinter as tk
 import sqlite3
 
 from reportlab.pdfgen import canvas
-from tkinter import ttk, StringVar
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import inch
+from tkinter import ttk
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.units import mm
+from reportlab.graphics.barcode import code128
 
+#================PDF GENERATOR==========
+class PDFGenerator:
+    def __init__(self, filename="test.pdf", page_size=landscape(A4), cols=3, rows=3, margin_mm=5, gutter_mm=0):
+        self.filename = filename
+        self.page_size = page_size
+        self.cols = cols
+        self.rows = rows
+        self.margin = margin_mm * mm
+        self.gutter = gutter_mm * mm
+        self.title_font = "Helvetica"
+
+    def create(self, items):
+        #========CREATE BOXES==========
+        c = canvas.Canvas(self.filename, pagesize=self.page_size)
+        page_w, page_h = self.page_size
+
+        card_w = (page_w - 2 * self.margin - (self.cols - 1) * self.gutter) / self.cols
+        card_h = (page_h - 2 * self.margin - (self.rows - 1) * self.gutter) / self.rows * 0.65
+        padding = 3 * mm
+
+        for i, (title, final_price, barcode, origin, unit_type) in enumerate(items):
+            col = i % self.cols
+            row = (i // self.cols) % self.rows
+            if i and col == 0 and row == 0:
+                c.showPage()
+
+            x = self.margin + col * (card_w + self.gutter)
+            y = page_h - self.margin - (row + 1) * card_h - (row * self.gutter)
+
+            c.setDash(3, 2)
+            c.rect(x, y, card_w, card_h)
+            c.setDash()
+
+            max_title_width = card_w - 2 * padding
+            title_font_size = self.get_fitting_font_size(c, title, max_title_width, max_font_size=12, min_font_size=8)
+            title_lines = self.split_title_to_fit(c, title, title_font_size, max_title_width, max_lines=2)
+
+
+            title_y = y - padding + card_h - padding
+            c.setFont(self.title_font, title_font_size)
+            for line in title_lines:
+                c.drawString(x + padding, title_y, line)
+                title_y -= title_font_size + 2
+
+            c.setFont("Helvetica-Bold", 30)
+            price_y = title_y - card_h / 4
+
+            price_text = f"€ {final_price:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            c.drawCentredString(x + card_w / 1.5, price_y, price_text)
+
+            #=========BARCODE=========
+            barcode_area_y = y + padding + 10
+            if origin.strip():
+                c.setFont("Helvetica", 9)
+                c.drawString(x + padding, barcode_area_y + 38, origin.strip())
+            try:
+                bc = code128.Code128(barcode, barHeight=12*mm, barWidth=0.28*mm, humanReadable=False)
+                bw = bc.width
+                max_bw = card_w - 2 * padding
+                scale = min(1.0, max_bw / bw)
+                c.saveState()
+                c.translate(x + padding, barcode_area_y)
+                c.scale(scale, 1.0)
+                bc.drawOn(c, 0, 0)
+                c.restoreState()
+            except Exception:
+                c.rect(x + padding, barcode_area_y, 60, 30)
+
+            #==========BARCODE TEXT==========
+            c.setFont("Helvetica", 9)
+            c.drawString(x + padding + 2, barcode_area_y - 12, barcode)
+
+            #=======UNIT INFO=========
+            unit = (unit_type or "").strip()
+            c.setFont("Helvetica", 9)
+            c.drawRightString(x + card_w - padding, y + padding + 10, f"Mērvienība: {unit}")
+            c.drawRightString(x + card_w - padding, y + padding, f"Mērvienības cena: {final_price:.2f}€/{unit}")
+
+        c.save()
+
+    def get_fitting_font_size(self, c, text, max_width, max_font_size=12, min_font_size=8):
+        size = max_font_size
+        while size >= min_font_size:
+            if c.stringWidth(text, self.title_font, size) <= max_width:
+                return size
+            size -= 1
+        return min_font_size
+
+    def split_title_to_fit(self, c, text, font_size, max_width, max_lines=2):
+        words = text.split()
+        lines, current = [], ""
+        for w in words:
+            test = (current + " " + w).strip()
+            if c.stringWidth(test, self.title_font, font_size) <= max_width:
+                current = test
+            else:
+                lines.append(current)
+                current = w
+                if len(lines) >= max_lines:
+                    break
+        if current and len(lines) < max_lines:
+            lines.append(current)
+        return lines
 class App:
     def __init__(self, master):
         self.master = master
@@ -13,7 +117,7 @@ class App:
         self.master.title("Price tag generator")
 
         self.pvn_rates = ["21%", "12%", "5%"]
-        self.unit_types = ["Gb", "Kg", "L", "M"]
+        self.unit_types = ["gb", "kg", "L", "M"]
 
         self.create_widgets()
         self.create_database()
@@ -58,7 +162,7 @@ class App:
         self.pvn_dropdown.grid(row=2, column=1, padx=5, pady=5)
 
         ttk.Label(frame, text="Unit Type:").grid(row=3, column=0, sticky="w")
-        self.unit_type_var = tk.StringVar(value="Kg")
+        self.unit_type_var = tk.StringVar(value="kg")
         self.unit_type_entry = ttk.Combobox(frame, textvariable=self.unit_type_var, values=self.unit_types, state="readonly", width=28)
         self.unit_type_entry.grid(row=3, column=1, padx=5, pady=5)
 
@@ -88,13 +192,13 @@ class App:
         self.table.heading("Barcode", text="Barcode")
         self.table.heading("Unit_Type", text="Unit Type")
 
-        self.table.column("ID", width=69, anchor="center")
-        self.table.column("Title", width=200, anchor="center")
-        self.table.column("Price", width=100, anchor="center")
+        self.table.column("ID", width=50, anchor="center")
+        self.table.column("Title", width=280, anchor="center")
+        self.table.column("Price", width=120, anchor="center")
         self.table.column("PVN_Percent", width=100, anchor="center")
-        self.table.column("PVN_Price", width=100, anchor="center")
-        self.table.column("Origin", width=100, anchor="center")
-        self.table.column("Barcode", width=100, anchor="center")
+        self.table.column("PVN_Price", width=110, anchor="center")
+        self.table.column("Origin", width=110, anchor="center")
+        self.table.column("Barcode", width=150, anchor="center")
         self.table.column("Unit_Type", width=100, anchor="center")
 
         self.table.pack(fill='both', expand=True, pady=10, padx=10)
@@ -112,7 +216,7 @@ class App:
         ttk.Button(export_frame, text="Export PDF", command=self.generate_pdf_report).grid(row=5, column=0, padx=0)
     #================SHOW MESSAGE==========
     def show_message(self, text):
-        self.message_label.config(text=text)
+        self.message_label.config(text=text, font=("Helvetica", 11))
         self.message_label.after(5000, lambda: self.message_label.config(text=""))
     
     #================LOAD DATA==========
@@ -134,11 +238,14 @@ class App:
             
         item = self.table.item(selection[0])
         self.editing_id = item["values"][0]
+
         self.title_entry.delete(0, tk.END)
         self.title_entry.insert(0, item["values"][1])
 
         self.price_entry.delete(0, tk.END)
         self.price_entry.insert(0, item["values"][2])
+
+        self.pvn_var.set(item["values"][3])
 
         self.origin_entry.delete(0, tk.END)
         self.origin_entry.insert(0, item["values"][5])
@@ -156,17 +263,21 @@ class App:
         price_entry_value = self.price_entry.get().strip().replace(',', '.')
         pvn_var_value = self.pvn_var.get()
 
+        if not price_entry_value:
+            self.show_message("Please fill in all fields.")
+            return
+        
         price_value = float(price_entry_value)
         
         pvn_percent = self.pvn_var.get()
         pvn_rate = float(pvn_percent.strip('%')) / 100
         pvn_price_value = round(price_value * (1 + pvn_rate), 2)
 
-        origin_entry_value = self.origin_entry.get().strip()
+        origin_entry_value = self.origin_entry.get().strip().title()
         barcode_entry_value = self.barcode_entry.get().strip()
         unit_type_entry_value = self.unit_type_entry.get().strip()
 
-        if not title_entry_value or not origin_entry_value or not barcode_entry_value or not unit_type_entry_value: 
+        if not title_entry_value or not price_entry_value or not origin_entry_value or not barcode_entry_value or not unit_type_entry_value: 
             self.show_message("Please fill in all fields.")
             return
 
@@ -191,7 +302,7 @@ class App:
         self.price_entry.delete(0, tk.END)
         self.origin_entry.delete(0, tk.END)
         self.barcode_entry.delete(0, tk.END)
-        self.unit_type_entry.set('Kg')
+        self.unit_type_entry.set('kg')
         self.pvn_var.set("21%")
 
     #================DELETE DATA==========
@@ -209,38 +320,14 @@ class App:
         self.show_message(f"Item {record_id} deleted successfully.")
 
     #================PDF REPORTING==========
+
     def generate_pdf_report(self):
-        c = canvas.Canvas("report.pdf", pagesize=A4)
-        width, height = A4
-
-        y = height - 1 * inch
-        c.setFont("Helvetica-Bold", 18)
-        c.drawString(1 * inch, y, "Product Report")
-
-        y -= 0.5 * inch
-
-        self.cursor.execute("SELECT title, property, price FROM data")
-        rows = self.cursor.fetchall()
-
-        for title, property_value, price in rows:
-            if y < 1 * inch:
-                c.showPage()
-                y = height - 1 * inch
-
-            c.setFont("Helvetica-Bold", 14)
-            c.drawString(1 * inch, y, str(title))
-
-            y -= 0.25 * inch
-            c.setFont("Helvetica", 12)
-            c.drawString(1.2 * inch, y, f"Type: {property_value}")
-
-            y -= 0.25 * inch
-            c.drawString(1.2 * inch, y, f"Price: {price} €")
-
-            y -= 0.4 * inch
-
-        c.save()
-        self.show_message("PDF created as report.pdf")
+        self.cursor.execute("SELECT title, pvn_price, barcode, origin, unit_type FROM data")
+        items = self.cursor.fetchall()
+        pdf = PDFGenerator(filename="test.pdf", cols=3, rows=3, margin_mm=5, gutter_mm=0)
+        pdf.create(items)
+        self.show_message("PDF grid layout created.")
+        
 if __name__ == "__main__":
     root = tk.Tk()
     app = App(root)
