@@ -5,7 +5,9 @@ from reportlab.pdfgen import canvas
 from tkinter import ttk
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.units import mm
-from reportlab.graphics.barcode import code128
+from reportlab.graphics.barcode import eanbc
+from reportlab.graphics.shapes import Drawing
+from reportlab.graphics import renderPDF
 
 #================PDF GENERATOR==========
 class PDFGenerator:
@@ -42,14 +44,12 @@ class PDFGenerator:
 
             max_title_width = card_w - 2 * padding
             title_font_size = self.get_fitting_font_size(c, title, max_title_width, max_font_size=12, min_font_size=8)
-            title_lines = self.split_title_to_fit(c, title, title_font_size, max_title_width, max_lines=2)
 
-
+            
             title_y = y - padding + card_h - padding
             c.setFont(self.title_font, title_font_size)
-            for line in title_lines:
-                c.drawString(x + padding, title_y, line)
-                title_y -= title_font_size + 2
+
+            c.drawString(x + padding, title_y, title)
 
             c.setFont("Helvetica-Bold", 30)
             price_y = title_y - card_h / 4
@@ -61,23 +61,30 @@ class PDFGenerator:
             barcode_area_y = y + padding + 10
             if origin.strip():
                 c.setFont("Helvetica", 9)
-                c.drawString(x + padding, barcode_area_y + 38, origin.strip())
+                c.drawString(x + padding, barcode_area_y + 43, origin.strip())
             try:
-                bc = code128.Code128(barcode, barHeight=12*mm, barWidth=0.28*mm, humanReadable=False)
+                ean_code = ''.join(filter(str.isdigit, barcode.strip()))
+                if len(ean_code) != 12:
+                    raise ValueError(f"Invalid EAN-13 data: '{barcode}'")
+                bc = eanbc.Ean13BarcodeWidget(ean_code, barHeight=14*mm)
+
+                barcode_drawing = Drawing(0, 0)
+                barcode_drawing.add(bc)
+
                 bw = bc.width
                 max_bw = card_w - 2 * padding
                 scale = min(1.0, max_bw / bw)
+
                 c.saveState()
                 c.translate(x + padding, barcode_area_y)
                 c.scale(scale, 1.0)
-                bc.drawOn(c, 0, 0)
+                renderPDF.draw(barcode_drawing, c, 0, 0)
                 c.restoreState()
-            except Exception:
+
+            except Exception as e:
+                print(f"Error creating barcode for '{barcode}': {e}")
                 c.rect(x + padding, barcode_area_y, 60, 30)
 
-            #==========BARCODE TEXT==========
-            c.setFont("Helvetica", 9)
-            c.drawString(x + padding + 2, barcode_area_y - 12, barcode)
 
             #=======UNIT INFO=========
             unit = (unit_type or "").strip()
@@ -94,22 +101,8 @@ class PDFGenerator:
                 return size
             size -= 1
         return min_font_size
+    
 
-    def split_title_to_fit(self, c, text, font_size, max_width, max_lines=2):
-        words = text.split()
-        lines, current = [], ""
-        for w in words:
-            test = (current + " " + w).strip()
-            if c.stringWidth(test, self.title_font, font_size) <= max_width:
-                current = test
-            else:
-                lines.append(current)
-                current = w
-                if len(lines) >= max_lines:
-                    break
-        if current and len(lines) < max_lines:
-            lines.append(current)
-        return lines
 class App:
     def __init__(self, master):
         self.master = master
@@ -277,10 +270,15 @@ class App:
         barcode_entry_value = self.barcode_entry.get().strip()
         unit_type_entry_value = self.unit_type_entry.get().strip()
 
+
         if not title_entry_value or not price_entry_value or not origin_entry_value or not barcode_entry_value or not unit_type_entry_value: 
             self.show_message("Please fill in all fields.")
             return
 
+        if len(barcode_entry_value) != 12 or not barcode_entry_value.isdigit():
+            self.show_message("Barcode must be exactly 12 digits.")
+            return
+        
         if self.editing_id:
             self.cursor.execute(
                 "UPDATE data SET title=?, price=?, pvn_percent=?, pvn_price=?, origin=?, barcode=?, unit_type=? WHERE id=?",
