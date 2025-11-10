@@ -16,7 +16,7 @@ class PDFGenerator:
         self.page_size = page_size
         self.cols = cols
         self.rows = rows
-        self.margin = margin_mm * mm
+        self.margin = margin_mm * mm + 4 * mm
         self.gutter = gutter_mm * mm
         self.title_font = "Helvetica"
 
@@ -25,9 +25,9 @@ class PDFGenerator:
         c = canvas.Canvas(self.filename, pagesize=self.page_size)
         page_w, page_h = self.page_size
 
-        card_w = (page_w - 2 * self.margin - (self.cols - 1) * self.gutter) / self.cols
-        card_h = (page_h - 2 * self.margin - (self.rows - 1) * self.gutter) / self.rows * 0.65
-        padding = 3 * mm
+        card_w = (page_w - 6 * self.margin - (self.cols - 1) * self.gutter) / self.cols
+        card_h = (page_h - 6 * self.margin - (self.rows - 1) * self.gutter) / self.rows * 0.65
+        padding = 4 * mm
 
         for i, (title, final_price, barcode, origin, unit_type) in enumerate(items):
             col = i % self.cols
@@ -42,41 +42,39 @@ class PDFGenerator:
             c.rect(x, y, card_w, card_h)
             c.setDash()
 
+            #=========TITLE=========
             max_title_width = card_w - 2 * padding
-            title_font_size = self.get_fitting_font_size(c, title, max_title_width, max_font_size=12, min_font_size=8)
-
-            
-            title_y = y - padding + card_h - padding
+            title_font_size = self.get_fitting_font_size(c, title, max_title_width, max_font_size=12, min_font_size=6)
+            title_y = y - padding + card_h - padding / title_font_size
             c.setFont(self.title_font, title_font_size)
-
             c.drawString(x + padding, title_y, title)
-
             c.setFont("Helvetica-Bold", 30)
-            price_y = title_y - card_h / 4
 
+            #=========PRICE=========
+            price_y = title_y - card_h / 3
             price_text = f"€ {final_price:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             c.drawCentredString(x + card_w / 1.5, price_y, price_text)
 
             #=========BARCODE=========
-            barcode_area_y = y + padding + 10
+            barcode_area_y = y + padding + 0
             if origin.strip():
                 c.setFont("Helvetica", 9)
-                c.drawString(x + padding, barcode_area_y + 43, origin.strip())
+                c.drawString(x + padding, barcode_area_y + 32, origin.strip())
             try:
                 ean_code = ''.join(filter(str.isdigit, barcode.strip()))
                 if len(ean_code) != 12:
                     raise ValueError(f"Invalid EAN-13 data: '{barcode}'")
-                bc = eanbc.Ean13BarcodeWidget(ean_code, barHeight=14*mm)
+                bc = eanbc.Ean13BarcodeWidget(ean_code, barHeight=10*mm)
 
                 barcode_drawing = Drawing(0, 0)
                 barcode_drawing.add(bc)
 
                 bw = bc.width
-                max_bw = card_w - 2 * padding
-                scale = min(1.0, max_bw / bw)
+                max_bw = card_w * padding
+                scale = min(1.1, max_bw / bw)
 
                 c.saveState()
-                c.translate(x + padding, barcode_area_y)
+                c.translate(x - 7 + padding, barcode_area_y)
                 c.scale(scale, 1.0)
                 renderPDF.draw(barcode_drawing, c, 0, 0)
                 c.restoreState()
@@ -88,13 +86,14 @@ class PDFGenerator:
 
             #=======UNIT INFO=========
             unit = (unit_type or "").strip()
-            c.setFont("Helvetica", 9)
-            c.drawRightString(x + card_w - padding, y + padding + 10, f"Mērvienība: {unit}")
-            c.drawRightString(x + card_w - padding, y + padding, f"Mērvienības cena: {final_price:.2f}€/{unit}")
+            c.setFont("Helvetica", 8)
+            c.drawRightString(x + card_w - padding, y + padding + 15, f"Mērvienība: {unit}")
+            c.drawRightString(x + card_w - padding, y + padding + 5, "Mērvienības cena:")
+            c.drawRightString(x + card_w - padding, y + padding - 5, f"{final_price:.2f}€/{unit}")
 
         c.save()
 
-    def get_fitting_font_size(self, c, text, max_width, max_font_size=12, min_font_size=8):
+    def get_fitting_font_size(self, c, text, max_width, max_font_size=11, min_font_size=5):
         size = max_font_size
         while size >= min_font_size:
             if c.stringWidth(text, self.title_font, size) <= max_width:
@@ -138,8 +137,11 @@ class App:
 
     def create_widgets(self):
         #=============INPUT/FRAME==========
-        frame = ttk.Frame(self.master)
-        frame.pack(pady=10, padx=10, fill='x')
+        label = ttk.Label(self.master, text="Product Information", font=("Segoe UI", 10, "bold"))
+        label.pack(anchor="w", padx=12, pady=(5, 0))
+
+        frame = tk.Frame(self.master, borderwidth=2, relief="groove")
+        frame.pack(pady=(0,10), padx=10, fill='x', ipadx=8, ipady=8)
 
         ttk.Label(frame, text="Title:").grid(row=0, column=0, sticky="w")
         self.title_entry = ttk.Entry(frame, width=30)
