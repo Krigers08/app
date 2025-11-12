@@ -8,6 +8,10 @@ from reportlab.lib.units import mm
 from reportlab.graphics.barcode import eanbc
 from reportlab.graphics.shapes import Drawing
 from reportlab.graphics import renderPDF
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+
+pdfmetrics.registerFont(TTFont("DejaVuSansBook", "dejavu-sans.book.ttf"))
 
 #================PDF GENERATOR==========
 class PDFGenerator:
@@ -18,7 +22,7 @@ class PDFGenerator:
         self.rows = rows
         self.margin = margin_mm * mm + 4 * mm
         self.gutter = gutter_mm * mm
-        self.title_font = "Helvetica"
+        self.title_font = "DejaVuSansBook"
 
     def create(self, items):
         #========CREATE BOXES==========
@@ -48,7 +52,7 @@ class PDFGenerator:
             title_y = y - padding + card_h - padding / title_font_size
             c.setFont(self.title_font, title_font_size)
             c.drawString(x + padding, title_y, title)
-            c.setFont("Helvetica-Bold", 30)
+            c.setFont("DejaVuSansBook", 32)
 
             #=========PRICE=========
             price_y = title_y - card_h / 3
@@ -58,7 +62,7 @@ class PDFGenerator:
             #=========BARCODE=========
             barcode_area_y = y + padding + 0
             if origin.strip():
-                c.setFont("Helvetica", 9)
+                c.setFont("DejaVuSansBook", 9)
                 c.drawString(x + padding, barcode_area_y + 32, origin.strip())
             try:
                 ean_code = ''.join(filter(str.isdigit, barcode.strip()))
@@ -86,7 +90,7 @@ class PDFGenerator:
 
             #=======UNIT INFO=========
             unit = (unit_type or "").strip()
-            c.setFont("Helvetica", 8)
+            c.setFont("DejaVuSansBook", 8)
             c.drawRightString(x + card_w - padding, y + padding + 15, f"Mērvienība: {unit}")
             c.drawRightString(x + card_w - padding, y + padding + 5, "Mērvienības cena:")
             c.drawRightString(x + card_w - padding, y + padding - 5, f"{final_price:.2f}€/{unit}")
