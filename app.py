@@ -262,11 +262,18 @@ class App:
         price_entry_value = self.price_entry.get().strip().replace(',', '.')
         pvn_var_value = self.pvn_var.get()
 
-        if not price_entry_value:
+        if not title_entry_value or not price_entry_value or not self.origin_entry.get().strip() or not self.barcode_entry.get().strip() or not self.unit_type_entry.get().strip():
             self.show_message("Please fill in all fields.")
             return
         
-        price_value = float(price_entry_value)
+        try:
+            price_value = float(price_entry_value)
+            if price_value <= 0:
+                self.show_message("Price must be a positive number.")
+                return
+        except ValueError:
+            self.show_message("Price must be a valid number.")
+            return
         
         pvn_percent = self.pvn_var.get()
         pvn_rate = float(pvn_percent.strip('%')) / 100
@@ -275,11 +282,6 @@ class App:
         origin_entry_value = self.origin_entry.get().strip().title()
         barcode_entry_value = self.barcode_entry.get().strip()
         unit_type_entry_value = self.unit_type_entry.get().strip()
-
-
-        if not title_entry_value or not price_entry_value or not origin_entry_value or not barcode_entry_value or not unit_type_entry_value: 
-            self.show_message("Please fill in all fields.")
-            return
 
         if len(barcode_entry_value) != 12 or not barcode_entry_value.isdigit():
             self.show_message("Barcode must be exactly 12 digits.")
